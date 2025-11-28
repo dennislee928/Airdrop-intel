@@ -20,19 +20,19 @@ sources:
       main: "https://coinmarketcap.com/airdrop/"
 
   altcointrading_airdrops:
-    enabled: false
+    enabled: true
     mode: "list"
     urls:
       main: "https://www.altcointrading.net/airdrops/"
 
   airdropsalert:
-    enabled: false
+    enabled: true
     mode: "list"
     urls:
       main: "https://airdropsalert.com/"
 
   icomarks_airdrops:
-    enabled: false
+    enabled: true
     mode: "list"
     urls:
       main: "https://icomarks.com/airdrops"
