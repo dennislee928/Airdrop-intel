@@ -118,6 +118,28 @@ jobs:
             TOP_UPCOMING="None"
           fi
 
+          # 提取高優先級警報的詳細信息（最多 3 個）
+          HIGH_ALERT_DETAILS=""
+          if [ -f "output/alerts.json" ] && [ "$NUM_HIGH_ALERTS" -gt 0 ]; then
+            HIGH_ALERT_DETAILS=$(jq -r '[.[] | select(.priority == "high")] | .[0:3] | .[] | "• **\(.project)**: \(.type // "airdrop") - \(.notes // "Check details")"' output/alerts.json 2>/dev/null | head -3 | tr '\n' '\n' || echo "")
+          fi
+
+          # 提取錢包活動摘要
+          WALLET_SUMMARY=""
+          if [ -f "output/wallets_report.json" ] && [ "$NUM_WALLETS" -gt 0 ]; then
+            WALLET_SUMMARY=$(jq -r '.[] | "• \(.name) (\(.chain)): \(.tx_count) TX, DeFi: \(if .has_defi_activity then "Yes" else "No" end)"' output/wallets_report.json 2>/dev/null | head -5 | tr '\n' '\n' || echo "")
+          fi
+
+          # 讀取 latest_report.md 的關鍵部分（如果有）
+          REPORT_PREVIEW=""
+          if [ -f "output/latest_report.md" ]; then
+            # 提取前 500 字符作為預覽
+            REPORT_PREVIEW=$(head -c 500 output/latest_report.md 2>/dev/null | sed 's/```/`/g' || echo "")
+            if [ ${#REPORT_PREVIEW} -gt 0 ]; then
+              REPORT_PREVIEW="\n\n📄 **Report Preview:**\n\`\`\`\n${REPORT_PREVIEW}...\n\`\`\`"
+            fi
+          fi
+
           # 建立 Discord 訊息（使用 Markdown 格式）
           MESSAGE="✅ **Airdrop Intel Pipeline Report**
 
@@ -128,30 +150,23 @@ jobs:
           • Active: \`$NUM_ACTIVE\` | Upcoming: \`$NUM_UPCOMING\` | Ended: \`$NUM_ENDED\` | Potential: \`$NUM_POTENTIAL\`
 
           🔍 **By Source:**
-          • Airdrops.io: \`$NUM_AIRDROP_IO\`
-          • CoinMarketCap: \`$NUM_CMC\`
-          • ICOMarks: \`$NUM_ICOMARKS\`
-          • AltcoinTrading: \`$NUM_ALTCOIN\`
-          • Airdrop Checklist: \`$NUM_CHECKLIST\`
-          • AirdropsAlert: \`$NUM_ALERT\`
+          • Airdrops.io: \`$NUM_AIRDROP_IO\` | CoinMarketCap: \`$NUM_CMC\` | ICOMarks: \`$NUM_ICOMARKS\` | AltcoinTrading: \`$NUM_ALTCOIN\`
 
           💼 **Wallets Analyzed:**
-          • Checked: \`$NUM_WALLETS\`
-          • With DeFi Activity: \`$WALLETS_WITH_ACTIVITY\`
-          • Total TX Count: \`$TOTAL_TX\`
+          • Checked: \`$NUM_WALLETS\` | With DeFi Activity: \`$WALLETS_WITH_ACTIVITY\` | Total TX: \`$TOTAL_TX\`
+          ${WALLET_SUMMARY:+$'\n'$WALLET_SUMMARY}
 
-          🚨 **Alerts Generated:**
-          • Total: **\`$NUM_ALERTS\`**
-          • High: **\`$NUM_HIGH_ALERTS\`** | Medium: \`$NUM_MEDIUM_ALERTS\` | Low: \`$NUM_LOW_ALERTS\`
-          • Top High Priority: $TOP_ALERTS
+          🚨 **Alerts Generated:** \`$NUM_ALERTS\` (High: \`$NUM_HIGH_ALERTS\` | Medium: \`$NUM_MEDIUM_ALERTS\` | Low: \`$NUM_LOW_ALERTS\`)
+          ${HIGH_ALERT_DETAILS:+$'\n'**High Priority Alerts:**$'\n'$HIGH_ALERT_DETAILS}
 
           🎯 **Top Active Airdrops:**
           $TOP_ACTIVE
 
           🔮 **Upcoming Airdrops:**
           $TOP_UPCOMING
+          ${REPORT_PREVIEW}
 
-          📎 Full details available in GitHub Actions artifacts.(https://github.com/dennislee928/Airdrop-intel/actions)"
+          📎 **Full Details:** [GitHub Actions Artifacts](https://github.com/${{ github.repository }}/actions)"
 
           # 使用 jq 正確轉義 JSON 字串
           ESCAPED_MESSAGE=$(echo "$MESSAGE" | jq -Rs .)
