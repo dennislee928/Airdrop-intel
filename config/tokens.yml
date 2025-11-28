@@ -1,0 +1,16 @@
+tokens:
+  - symbol: MON
+    coingecko_id: "monad"
+    coinmarketcap_id: 12345
+    watch:
+      launchpool: true
+      listings: true
+      blog: true
+
+  - symbol: BGB
+    coinmarketcap_id: 5195
+    watch:
+      launchpool: true
+      listings: false
+      blog: false
+

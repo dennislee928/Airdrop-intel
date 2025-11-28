@@ -1,0 +1,9 @@
+wallets:
+  - name: main_eth
+    chain: ethereum
+    address: "0x1111..."
+
+  - name: arb_farming
+    chain: arbitrum
+    address: "0x2222..."
+

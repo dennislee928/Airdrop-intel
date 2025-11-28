@@ -1,0 +1,16 @@
+rules:
+  - id: new_launchpool_for_watched_token
+    type: listing
+    priority: high
+    match:
+      category: "launchpool"
+      token_in_watchlist: true
+
+  - id: potential_retrospective_airdrop
+    type: wallet_activity
+    priority: medium
+    match:
+      has_defi_activity: true
+      chain_in: ["ethereum", "arbitrum", "optimism", "solana"]
+      tx_count_min: 20
+
