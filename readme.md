@@ -1,7 +1,7 @@
-一、整體架構（只到通知為止）
+一、整體架構
 
-用一個 GitHub repo，例如 airdrop-intel-pipeline：
-
+#用一個 GitHub repo，例如 airdrop-intel-pipeline：
+```plaintext
 airdrop-intel-pipeline/
 ├─ config/
 │  ├─ tokens.yml          # 追蹤幣種 & 專案 (MON, BGB, 其他)
@@ -21,9 +21,9 @@ airdrop-intel-pipeline/
 │      └─ pipeline.yml    # 定時跑整個流程
 ├─ requirements.txt
 └─ README.md
-
-config 範例
-
+```
+## config 範例
+```yaml
 config/tokens.yml：
 
 tokens:
@@ -40,8 +40,9 @@ tokens:
       launchpool: true
       listings: false
       blog: false
+```
 
-
+```yaml
 config/wallets.yml：
 
 wallets:
@@ -51,9 +52,10 @@ wallets:
   - name: arb_farming
     chain: arbitrum
     address: "0x2222..."
+```
 
-
-config/rules.yml（怎樣會被判定成「值得你手動看」）：
+```yaml
+config/rules.yml（手動判斷依據）：
 
 rules:
   - id: new_launchpool_for_watched_token
@@ -70,8 +72,10 @@ rules:
       has_defi_activity: true
       chain_in: ["ethereum", "arbitrum", "optimism", "solana"]
       tx_count_min: 20
+```
 
-二、GitHub Actions：單一 workflow 跑完整 pipeline
+
+
 # .github/workflows/pipeline.yml
 name: Airdrop Intel Pipeline
 
