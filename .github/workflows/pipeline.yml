@@ -36,7 +36,8 @@ jobs:
           python scripts/aggregate.py
           python scripts/notify_github.py
           python scripts/notify_discord.py
-          
+        # trunk-ignore(git-diff-check/error)
+        # Send mini-report to Discord
       - name: Send mini-report to Discord
         if: env.DISCORD_WEBHOOK_URL != ''
         env:
@@ -51,6 +52,10 @@ jobs:
           • Sources parsed: $NUM_SOURCES\n
           • Wallets checked: $NUM_WALLETS\n
           • Alerts: $NUM_ALERTS\n
+          • Upcoming Airdrops: $NUM_UPCOMING_AIRDROP\n
+          • Upcoming Airdrops details: $UPCOMING_AIRDROP_DETAILS\n
+          • Ended Airdrops: $NUM_ENDED_AIRDROP\n
+          • Active Airdrops: $NUM_ACTIVE_AIRDROP\n
           \nFor full details, see the GitHub Actions artifacts."
           # Escape newlines for JSON
           ESCAPED_MESSAGE=$(printf "%s" "$MESSAGE" | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')

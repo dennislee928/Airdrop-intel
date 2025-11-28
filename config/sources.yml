@@ -5,7 +5,8 @@ sources:
     urls:
       active: "https://airdrops.io/latest"
       upcoming: "https://airdrops.io/upcoming"
-      ended: "https://airdrops.io/ended"
+      # ended URL 可能已變更或不存在，暫時只使用 active 和 upcoming
+      # ended: "https://airdrops.io/ended"
 
   airdrop_checklist:
     enabled: false  # 暫時停用：DNS 解析失敗，網站可能不存在或無法訪問

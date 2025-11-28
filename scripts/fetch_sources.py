@@ -72,8 +72,23 @@ def fetch_with_retry(url: str, timeout: int = 20, headers: Optional[Dict] = None
     for attempt in range(MAX_RETRIES):
         try:
             resp = requests.get(url, timeout=timeout, headers=final_headers)
+            # 對於 404，直接返回 None，不需要重試
+            if resp.status_code == 404:
+                logger.warning(f"URL 不存在 (404): {url}")
+                return None
             resp.raise_for_status()
             return resp
+        except requests.exceptions.HTTPError as e:
+            # 404 不需要重試
+            if e.response and e.response.status_code == 404:
+                logger.warning(f"URL 不存在 (404): {url}")
+                return None
+            logger.warning(f"HTTP 錯誤 (嘗試 {attempt + 1}/{MAX_RETRIES}): {url} - {e}")
+            if attempt < MAX_RETRIES - 1:
+                time.sleep(RETRY_DELAY * (attempt + 1))
+            else:
+                logger.error(f"請求最終失敗: {url}")
+                return None
         except requests.exceptions.RequestException as e:
             logger.warning(f"請求失敗 (嘗試 {attempt + 1}/{MAX_RETRIES}): {url} - {e}")
             if attempt < MAX_RETRIES - 1:
@@ -104,6 +119,11 @@ def fetch_airdrops_io(src_cfg: Dict) -> List[Dict]:
         resp = fetch_with_retry(url)
         if not resp:
             logger.warning(f"Airdrops.io ({status}) 請求失敗，跳過")
+            continue
+
+        # 檢查是否是 404，如果是則跳過（URL 可能不存在）
+        if hasattr(resp, 'status_code') and resp.status_code == 404:
+            logger.warning(f"Airdrops.io ({status}) URL 不存在 (404)，跳過")
             continue
 
         try:
@@ -247,7 +267,7 @@ def fetch_cmc_airdrops(src_cfg: Dict) -> List[Dict]:
                     row.select_one("[class*='status']")
                 )
                 status_text = status_el.get_text(strip=True).lower() if status_el else "unknown"
-                
+
                 if "upcoming" in status_text:
                     status = "upcoming"
                 elif "ended" in status_text or "closed" in status_text:
@@ -429,8 +449,25 @@ def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_tit
 
         if len(cards) == 0:
             logger.warning(f"{src_name} 未找到任何項目，可能需要調整 CSS selector")
-            # 輸出部分 HTML 供調試
-            logger.debug(f"{src_name} HTML 預覽（前 500 字元）: {resp.text[:500]}")
+            # 嘗試找出可能的選擇器
+            soup_debug = BeautifulSoup(resp.text, "html.parser")
+            # 檢查常見的容器元素
+            possible_containers = soup_debug.select("article, .card, .item, .post, .entry, [class*='airdrop'], [class*='list'], div[class], section[class]")
+            if possible_containers:
+                logger.info(f"{src_name} 找到 {len(possible_containers)} 個可能的容器元素，但 selector 不匹配")
+                # 輸出前幾個容器的 class 供參考
+                classes_found = []
+                for container in possible_containers[:5]:
+                    if container.get("class"):
+                        classes_found.append(".".join(container.get("class", [])))
+                if classes_found:
+                    logger.info(f"{src_name} 發現的 class 範例: {', '.join(set(classes_found)[:5])}")
+            else:
+                logger.warning(f"{src_name} 頁面結構可能使用 JavaScript 動態載入，或結構完全不同")
+                # 檢查是否有 script 標籤（可能使用 JS 載入）
+                scripts = soup_debug.find_all("script")
+                if len(scripts) > 5:
+                    logger.info(f"{src_name} 頁面包含 {len(scripts)} 個 script 標籤，可能使用 JavaScript 動態載入內容")
 
         # 處理 css_title，可能是多個選擇器
         title_selectors = [s.strip() for s in css_title.split(",")] if "," in css_title else [css_title]
@@ -443,7 +480,7 @@ def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_tit
                     title_el = card.select_one(selector)
                     if title_el:
                         break
-                
+
                 # 如果還是沒找到，嘗試通用選擇器
                 if not title_el:
                     title_el = (
@@ -512,7 +549,10 @@ def run():
     source_stats = {}
 
     # 記錄所有啟用的來源
-    enabled_sources = [name for name, cfg in sources.items() if cfg.get("enabled") and cfg.get("mode") == "list"]
+    enabled_sources = [
+        name for name, cfg in sources.items()
+        if cfg.get("enabled") and cfg.get("mode") == "list"
+    ]
     logger.info(f"啟用的列表來源: {', '.join(enabled_sources)}")
 
     # Airdrops.io
@@ -565,9 +605,10 @@ def run():
     generic_sources = {
         "altcointrading_airdrops": (".airdrop-item", "a"),
         "airdropsalert": (
-            # 嘗試多種可能的選擇器
-            ".airdrop-card, .card, article, [class*='airdrop'], [class*='item'], .post, .entry",
-            "a, h2, h3, .title, [class*='title']"
+            # airdropsalert 可能需要更廣泛的選擇器
+            # 嘗試多種可能的選擇器（優先順序從左到右）
+            "article, .card, .item, .post, .entry, [class*='airdrop'], [class*='list'], div[class*='airdrop'], section[class*='airdrop']",
+            "a, h2, h3, h4, .title, [class*='title'], strong, b"
         ),
         "icomarks_airdrops": (".airdrop-item", "a"),
     }
