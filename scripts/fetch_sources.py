@@ -363,26 +363,56 @@ def fetch_airdrop_checklist(src_cfg: Dict) -> List[Dict]:
 def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_title: str) -> List[Dict]:
     """通用函式處理 AltcoinTrading / AirdropsAlert / ICOMarks"""
     if not src_cfg.get("enabled"):
+        logger.info(f"{src_name} 已停用，跳過")
         return []
 
     url = src_cfg.get("urls", {}).get("main")
     if not url:
+        logger.warning(f"{src_name} URL 未設定")
         return []
 
     logger.info(f"抓取 {src_name}: {url}")
     resp = fetch_with_retry(url)
     if not resp:
+        logger.warning(f"{src_name} 請求失敗")
         return []
 
     events = []
     try:
         soup = BeautifulSoup(resp.text, "html.parser")
-        cards = soup.select(css_card)
+        # 嘗試多種可能的 CSS selector
+        cards = (
+            soup.select(css_card) or
+            soup.select("article") or
+            soup.select(".card") or
+            soup.select("[class*='airdrop']") or
+            soup.select("[class*='item']") or
+            soup.select("tr") or
+            soup.select("li")
+        )
+
+        logger.info(f"{src_name} 找到 {len(cards)} 個可能的項目（使用 selector: {css_card}）")
+
+        if len(cards) == 0:
+            logger.warning(f"{src_name} 未找到任何項目，可能需要調整 CSS selector")
 
         for card in cards:
             try:
-                title_el = card.select_one(css_title)
+                # 嘗試多種方式找標題
+                title_el = (
+                    card.select_one(css_title) or
+                    card.select_one("a") or
+                    card.select_one("h2") or
+                    card.select_one("h3") or
+                    card.select_one("h4") or
+                    card.select_one(".title") or
+                    card.select_one("[class*='title']")
+                )
                 proj_name = title_el.get_text(strip=True) if title_el else "Unknown"
+
+                if proj_name == "Unknown" or not proj_name or len(proj_name) < 2:
+                    # 跳過無效的項目
+                    continue
 
                 detail_url = url
                 if title_el and title_el.has_attr("href"):
@@ -390,7 +420,11 @@ def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_tit
                     if not detail_url.startswith("http"):
                         detail_url = f"{url.rstrip('/')}{detail_url}"
 
-                desc_el = card.find("p")
+                desc_el = (
+                    card.find("p") or
+                    card.select_one(".description") or
+                    card.select_one("[class*='desc']")
+                )
                 desc_text = desc_el.get_text(" ", strip=True) if desc_el else ""
 
                 events.append({
@@ -409,13 +443,13 @@ def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_tit
                     },
                 })
             except Exception as e:
-                logger.warning(f"解析 {src_name} 卡片失敗: {e}")
+                logger.debug(f"解析 {src_name} 卡片失敗: {e}")
                 continue
 
     except Exception as e:
         logger.error(f"解析 {src_name} HTML 失敗: {e}")
 
-    logger.info(f"{src_name} 收集到 {len(events)} 個事件")
+    logger.info(f"{src_name} 總共收集到 {len(events)} 個事件")
     return events
 
 
@@ -429,35 +463,51 @@ def run():
     all_events = []
     source_stats = {}
 
+    # 記錄所有啟用的來源
+    enabled_sources = [name for name, cfg in sources.items() if cfg.get("enabled") and cfg.get("mode") == "list"]
+    logger.info(f"啟用的列表來源: {', '.join(enabled_sources)}")
+
     # Airdrops.io
     if "airdrops_io" in sources:
+        logger.info("--- 開始處理 Airdrops.io ---")
         try:
             events = fetch_airdrops_io(sources["airdrops_io"])
             all_events.extend(events)
             source_stats["airdrops_io"] = len(events)
+            logger.info(f"Airdrops.io 完成: {len(events)} 個事件")
         except Exception as e:
-            logger.error(f"抓取 Airdrops.io 失敗: {e}")
+            logger.error(f"抓取 Airdrops.io 失敗: {e}", exc_info=True)
             source_stats["airdrops_io"] = 0
+    else:
+        logger.info("Airdrops.io 未在配置中")
 
     # CoinMarketCap Airdrops
     if "cmc_airdrops" in sources:
+        logger.info("--- 開始處理 CoinMarketCap Airdrops ---")
         try:
             events = fetch_cmc_airdrops(sources["cmc_airdrops"])
             all_events.extend(events)
             source_stats["cmc_airdrops"] = len(events)
+            logger.info(f"CoinMarketCap Airdrops 完成: {len(events)} 個事件")
         except Exception as e:
-            logger.error(f"抓取 CoinMarketCap Airdrops 失敗: {e}")
+            logger.error(f"抓取 CoinMarketCap Airdrops 失敗: {e}", exc_info=True)
             source_stats["cmc_airdrops"] = 0
+    else:
+        logger.info("CoinMarketCap Airdrops 未在配置中")
 
     # Airdrop Checklist
     if "airdrop_checklist" in sources:
+        logger.info("--- 開始處理 Airdrop Checklist ---")
         try:
             events = fetch_airdrop_checklist(sources["airdrop_checklist"])
             all_events.extend(events)
             source_stats["airdrop_checklist"] = len(events)
+            logger.info(f"Airdrop Checklist 完成: {len(events)} 個事件")
         except Exception as e:
-            logger.error(f"抓取 Airdrop Checklist 失敗: {e}")
+            logger.error(f"抓取 Airdrop Checklist 失敗: {e}", exc_info=True)
             source_stats["airdrop_checklist"] = 0
+    else:
+        logger.info("Airdrop Checklist 未在配置中")
 
     # AltcoinTrading / AirdropsAlert / ICOMarks
     generic_sources = {
@@ -468,6 +518,7 @@ def run():
 
     for src_name, (css_card, css_title) in generic_sources.items():
         if src_name in sources:
+            logger.info(f"--- 開始處理 {src_name} ---")
             try:
                 events = fetch_generic_list_site(
                     src_name,
@@ -477,16 +528,28 @@ def run():
                 )
                 all_events.extend(events)
                 source_stats[src_name] = len(events)
+                logger.info(f"{src_name} 完成: {len(events)} 個事件")
             except Exception as e:
-                logger.error(f"抓取 {src_name} 失敗: {e}")
+                logger.error(f"抓取 {src_name} 失敗: {e}", exc_info=True)
                 source_stats[src_name] = 0
+        else:
+            logger.info(f"{src_name} 未在配置中")
 
     # 輸出統計資訊
     logger.info("=" * 60)
     logger.info("收集統計:")
-    for src_name, count in source_stats.items():
-        logger.info(f"  {src_name}: {count} 個事件")
+    logger.info(f"  總計處理 {len(source_stats)} 個來源")
+    for src_name, count in sorted(source_stats.items()):
+        status = "✓" if count > 0 else "✗"
+        logger.info(f"  {status} {src_name}: {count} 個事件")
     logger.info(f"總計: {len(all_events)} 個事件")
+
+    # 檢查是否有來源沒有資料
+    zero_sources = [name for name, count in source_stats.items() if count == 0]
+    if zero_sources:
+        logger.warning(f"以下來源未收集到資料: {', '.join(zero_sources)}")
+        logger.warning("可能原因: CSS selector 不正確、網頁結構改變、或網站有反爬蟲機制")
+
     logger.info("=" * 60)
 
     # 寫出統一 events JSON
