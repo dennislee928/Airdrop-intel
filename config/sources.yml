@@ -8,7 +8,10 @@ sources:
       ended: "https://airdrops.io/ended"
 
   airdrop_checklist:
-    enabled: true
+    enabled: false  # 暫時停用：DNS 解析失敗，網站可能不存在或無法訪問
+    # 可能的替代網站：
+    # - https://airdropalert.io/
+    # - https://coinairdrop.app/
     mode: "list"
     urls:
       main: "https://airdropchecklist.com/"

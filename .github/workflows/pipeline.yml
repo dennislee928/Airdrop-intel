@@ -36,6 +36,30 @@ jobs:
           python scripts/aggregate.py
           python scripts/notify_github.py
           python scripts/notify_discord.py
+          
+      - name: Send mini-report to Discord
+        if: env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          PIPELINE_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          NUM_SOURCES=$(jq '. | length' pipeline-reports/events_sources.json || echo "N/A")
+          NUM_ALERTS=$(jq '. | length' pipeline-reports/alerts.json || echo "N/A")
+          NUM_WALLETS=$(jq '. | length' pipeline-reports/wallets_report.json || echo "N/A")
+          MESSAGE="✅ *Airdrop Intel Pipeline Report*\n
+          • Time: $PIPELINE_TIME UTC\n
+          • Sources parsed: $NUM_SOURCES\n
+          • Wallets checked: $NUM_WALLETS\n
+          • Alerts: $NUM_ALERTS\n
+          \nFor full details, see the GitHub Actions artifacts."
+          # Escape newlines for JSON
+          ESCAPED_MESSAGE=$(printf "%s" "$MESSAGE" | awk '{printf "%s\\n", $0}' | sed 's/"/\\"/g')
+          PAYLOAD="{\"content\": \"$ESCAPED_MESSAGE\"}"
+          curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -d "$PAYLOAD" \
+            "$DISCORD_WEBHOOK_URL"
+
 
       - name: Upload reports
         if: always()

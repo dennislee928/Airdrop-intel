@@ -29,6 +29,8 @@ OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 # 重試設定
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # 秒
+# 請求間隔（避免被 rate limit）
+REQUEST_DELAY = 1  # 秒，在請求之間等待
 
 
 def load_tokens() -> List[Dict]:
@@ -55,9 +57,21 @@ def load_sources() -> Dict:
 
 def fetch_with_retry(url: str, timeout: int = 20, headers: Optional[Dict] = None) -> Optional[requests.Response]:
     """帶重試機制的 HTTP GET 請求"""
+    # 預設 headers，模擬瀏覽器請求以避免被阻擋
+    default_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
+    # 合併 headers
+    final_headers = {**default_headers, **(headers or {})}
+
     for attempt in range(MAX_RETRIES):
         try:
-            resp = requests.get(url, timeout=timeout, headers=headers or {})
+            resp = requests.get(url, timeout=timeout, headers=final_headers)
             resp.raise_for_status()
             return resp
         except requests.exceptions.RequestException as e:
@@ -84,6 +98,9 @@ def fetch_airdrops_io(src_cfg: Dict) -> List[Dict]:
             continue
 
         logger.info(f"抓取 Airdrops.io - {status}: {url}")
+        # 在請求之間增加延遲，避免被 rate limit
+        if events:  # 不是第一個請求
+            time.sleep(REQUEST_DELAY)
         resp = fetch_with_retry(url)
         if not resp:
             logger.warning(f"Airdrops.io ({status}) 請求失敗，跳過")
@@ -361,7 +378,13 @@ def fetch_airdrop_checklist(src_cfg: Dict) -> List[Dict]:
 
 
 def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_title: str) -> List[Dict]:
-    """通用函式處理 AltcoinTrading / AirdropsAlert / ICOMarks"""
+    """
+    通用函式處理 AltcoinTrading / AirdropsAlert / ICOMarks
+
+    Args:
+        css_card: CSS selector 字串，可以是多個選擇器用逗號分隔
+        css_title: CSS selector 字串，可以是多個選擇器用逗號分隔
+    """
     if not src_cfg.get("enabled"):
         logger.info(f"{src_name} 已停用，跳過")
         return []
@@ -380,34 +403,59 @@ def fetch_generic_list_site(src_name: str, src_cfg: Dict, css_card: str, css_tit
     events = []
     try:
         soup = BeautifulSoup(resp.text, "html.parser")
-        # 嘗試多種可能的 CSS selector
-        cards = (
-            soup.select(css_card) or
-            soup.select("article") or
-            soup.select(".card") or
-            soup.select("[class*='airdrop']") or
-            soup.select("[class*='item']") or
-            soup.select("tr") or
-            soup.select("li")
-        )
 
-        logger.info(f"{src_name} 找到 {len(cards)} 個可能的項目（使用 selector: {css_card}）")
+        # 如果 css_card 包含多個選擇器（用逗號分隔），分別嘗試
+        card_selectors = [s.strip() for s in css_card.split(",")] if "," in css_card else [css_card]
+
+        cards = []
+        for selector in card_selectors:
+            found = soup.select(selector)
+            if found:
+                cards.extend(found)
+                logger.debug(f"{src_name} 使用 selector '{selector}' 找到 {len(found)} 個項目")
+                break
+
+        # 如果還是沒找到，嘗試通用選擇器
+        if not cards:
+            fallback_selectors = ["article", ".card", "[class*='airdrop']", "[class*='item']", "tr", "li", ".post", ".entry"]
+            for selector in fallback_selectors:
+                found = soup.select(selector)
+                if found and len(found) > 0:
+                    cards = found
+                    logger.info(f"{src_name} 使用 fallback selector '{selector}' 找到 {len(found)} 個項目")
+                    break
+
+        logger.info(f"{src_name} 找到 {len(cards)} 個可能的項目")
 
         if len(cards) == 0:
             logger.warning(f"{src_name} 未找到任何項目，可能需要調整 CSS selector")
+            # 輸出部分 HTML 供調試
+            logger.debug(f"{src_name} HTML 預覽（前 500 字元）: {resp.text[:500]}")
+
+        # 處理 css_title，可能是多個選擇器
+        title_selectors = [s.strip() for s in css_title.split(",")] if "," in css_title else [css_title]
 
         for card in cards:
             try:
                 # 嘗試多種方式找標題
-                title_el = (
-                    card.select_one(css_title) or
-                    card.select_one("a") or
-                    card.select_one("h2") or
-                    card.select_one("h3") or
-                    card.select_one("h4") or
-                    card.select_one(".title") or
-                    card.select_one("[class*='title']")
-                )
+                title_el = None
+                for selector in title_selectors:
+                    title_el = card.select_one(selector)
+                    if title_el:
+                        break
+                
+                # 如果還是沒找到，嘗試通用選擇器
+                if not title_el:
+                    title_el = (
+                        card.select_one("a") or
+                        card.select_one("h2") or
+                        card.select_one("h3") or
+                        card.select_one("h4") or
+                        card.select_one(".title") or
+                        card.select_one("[class*='title']") or
+                        card.select_one("strong") or
+                        card.select_one("b")
+                    )
                 proj_name = title_el.get_text(strip=True) if title_el else "Unknown"
 
                 if proj_name == "Unknown" or not proj_name or len(proj_name) < 2:
@@ -498,6 +546,9 @@ def run():
     # Airdrop Checklist
     if "airdrop_checklist" in sources:
         logger.info("--- 開始處理 Airdrop Checklist ---")
+        # 在請求之間增加延遲
+        if all_events:
+            time.sleep(REQUEST_DELAY)
         try:
             events = fetch_airdrop_checklist(sources["airdrop_checklist"])
             all_events.extend(events)
@@ -510,16 +561,31 @@ def run():
         logger.info("Airdrop Checklist 未在配置中")
 
     # AltcoinTrading / AirdropsAlert / ICOMarks
+    # 使用更通用的選擇器，並針對每個網站優化
     generic_sources = {
         "altcointrading_airdrops": (".airdrop-item", "a"),
-        "airdropsalert": (".airdrop-card", "a"),
+        "airdropsalert": (
+            # 嘗試多種可能的選擇器
+            ".airdrop-card, .card, article, [class*='airdrop'], [class*='item'], .post, .entry",
+            "a, h2, h3, .title, [class*='title']"
+        ),
         "icomarks_airdrops": (".airdrop-item", "a"),
     }
 
-    for src_name, (css_card, css_title) in generic_sources.items():
+    for src_name, selector_tuple in generic_sources.items():
         if src_name in sources:
             logger.info(f"--- 開始處理 {src_name} ---")
+            # 在請求之間增加延遲
+            if all_events:  # 不是第一個來源
+                time.sleep(REQUEST_DELAY)
             try:
+                # 處理 selector_tuple，可能是 tuple 或單一字串
+                if isinstance(selector_tuple, tuple):
+                    css_card, css_title = selector_tuple
+                else:
+                    css_card = selector_tuple
+                    css_title = "a"
+
                 events = fetch_generic_list_site(
                     src_name,
                     sources[src_name],
