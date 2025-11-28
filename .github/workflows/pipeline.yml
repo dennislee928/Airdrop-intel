@@ -121,27 +121,23 @@ jobs:
           # 提取高優先級警報的詳細信息（最多 3 個）
           HIGH_ALERT_DETAILS=""
           if [ -f "output/alerts.json" ] && [ "$NUM_HIGH_ALERTS" -gt 0 ]; then
-            HIGH_ALERT_DETAILS=$(jq -r '[.[] | select(.priority == "high")] | .[0:3] | .[] | "• **\(.project)**: \(.type // "airdrop") - \(.notes // "Check details")"' output/alerts.json 2>/dev/null | head -3 | tr '\n' '\n' || echo "")
+            HIGH_ALERT_DETAILS=$(jq -r '[.[] | select(.priority == "high")] | .[0:3] | .[] | "• **\(.project)**: \(.type // "airdrop") - \(.notes // "Check details")"' output/alerts.json 2>/dev/null | head -3 || echo "")
           fi
 
           # 提取錢包活動摘要
           WALLET_SUMMARY=""
           if [ -f "output/wallets_report.json" ] && [ "$NUM_WALLETS" -gt 0 ]; then
-            WALLET_SUMMARY=$(jq -r '.[] | "• \(.name) (\(.chain)): \(.tx_count) TX, DeFi: \(if .has_defi_activity then "Yes" else "No" end)"' output/wallets_report.json 2>/dev/null | head -5 | tr '\n' '\n' || echo "")
+            WALLET_SUMMARY=$(jq -r '.[] | "• \(.name) (\(.chain)): \(.tx_count) TX, DeFi: \(if .has_defi_activity then "Yes" else "No" end)"' output/wallets_report.json 2>/dev/null | head -5 || echo "")
           fi
 
-          # 讀取 latest_report.md 的關鍵部分（如果有）
+          # 讀取 latest_report.md 的關鍵部分（如果有，限制長度避免超過 Discord 2000 字符限制）
           REPORT_PREVIEW=""
           if [ -f "output/latest_report.md" ]; then
-            # 提取前 500 字符作為預覽
-            REPORT_PREVIEW=$(head -c 500 output/latest_report.md 2>/dev/null | sed 's/```/`/g' || echo "")
-            if [ ${#REPORT_PREVIEW} -gt 0 ]; then
-              REPORT_PREVIEW="\n\n📄 **Report Preview:**\n\`\`\`\n${REPORT_PREVIEW}...\n\`\`\`"
-            fi
+            REPORT_PREVIEW=$(head -c 300 output/latest_report.md 2>/dev/null | sed 's/```/`/g' | sed 's/\*\*/**/g' || echo "")
           fi
 
-          # 建立 Discord 訊息（使用 Markdown 格式）
-          MESSAGE="✅ **Airdrop Intel Pipeline Report**
+          # 構建訊息主體
+          MESSAGE_BASE="✅ **Airdrop Intel Pipeline Report**
 
           📅 **Execution Time:** \`$PIPELINE_TIME\` UTC
 
@@ -153,18 +149,49 @@ jobs:
           • Airdrops.io: \`$NUM_AIRDROP_IO\` | CoinMarketCap: \`$NUM_CMC\` | ICOMarks: \`$NUM_ICOMARKS\` | AltcoinTrading: \`$NUM_ALTCOIN\`
 
           💼 **Wallets Analyzed:**
-          • Checked: \`$NUM_WALLETS\` | With DeFi Activity: \`$WALLETS_WITH_ACTIVITY\` | Total TX: \`$TOTAL_TX\`
-          ${WALLET_SUMMARY:+$'\n'$WALLET_SUMMARY}
+          • Checked: \`$NUM_WALLETS\` | With DeFi Activity: \`$WALLETS_WITH_ACTIVITY\` | Total TX: \`$TOTAL_TX\`"
 
-          🚨 **Alerts Generated:** \`$NUM_ALERTS\` (High: \`$NUM_HIGH_ALERTS\` | Medium: \`$NUM_MEDIUM_ALERTS\` | Low: \`$NUM_LOW_ALERTS\`)
-          ${HIGH_ALERT_DETAILS:+$'\n'**High Priority Alerts:**$'\n'$HIGH_ALERT_DETAILS}
+          # 添加錢包摘要（如果有）
+          if [ -n "$WALLET_SUMMARY" ]; then
+            MESSAGE_BASE="$MESSAGE_BASE
+
+          $WALLET_SUMMARY"
+          fi
+
+          # 添加警報信息
+          MESSAGE_BASE="$MESSAGE_BASE
+
+          🚨 **Alerts Generated:** \`$NUM_ALERTS\` (High: \`$NUM_HIGH_ALERTS\` | Medium: \`$NUM_MEDIUM_ALERTS\` | Low: \`$NUM_LOW_ALERTS\`)"
+
+          # 添加高優先級警報詳情（如果有）
+          if [ -n "$HIGH_ALERT_DETAILS" ]; then
+            MESSAGE_BASE="$MESSAGE_BASE
+
+          **High Priority Alerts:**
+          $HIGH_ALERT_DETAILS"
+          fi
+
+          # 添加空投列表
+          MESSAGE_BASE="$MESSAGE_BASE
 
           🎯 **Top Active Airdrops:**
           $TOP_ACTIVE
 
           🔮 **Upcoming Airdrops:**
-          $TOP_UPCOMING
-          ${REPORT_PREVIEW}
+          $TOP_UPCOMING"
+
+          # 添加報告預覽（如果有且不會超過長度限制）
+          if [ -n "$REPORT_PREVIEW" ]; then
+            MESSAGE_BASE="$MESSAGE_BASE
+
+          📄 **Report Preview:**
+          \`\`\`
+          ${REPORT_PREVIEW}...
+          \`\`\`"
+          fi
+
+          # 添加鏈接
+          MESSAGE="$MESSAGE_BASE
 
           📎 **Full Details:** [GitHub Actions Artifacts](https://github.com/${{ github.repository }}/actions)"
 
