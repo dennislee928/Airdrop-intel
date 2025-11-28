@@ -40,7 +40,7 @@ jobs:
           python scripts/notify_discord.py
 
       - name: Send mini-report to Discord
-        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' && always() }}
+        if: ${{ secrets.DISCORD_WEBHOOK_URL  }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
