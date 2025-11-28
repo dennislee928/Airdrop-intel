@@ -1,0 +1,195 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --pixel-green: #00ff41;
+  --pixel-cyan: #00ffff;
+  --pixel-yellow: #ffff00;
+  --pixel-red: #ff0040;
+  --pixel-purple: #ff00ff;
+  --pixel-white: #ffffff;
+  --pixel-black: #000000;
+  --pixel-gray: #808080;
+}
+
+body {
+  font-family: 'Press Start 2P', cursive;
+  background: var(--bg-primary);
+  color: var(--pixel-green);
+  line-height: 1.6;
+  overflow-x: hidden;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+/* 8-bit 像素邊框效果 */
+.pixel-border {
+  border: 4px solid var(--pixel-white);
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-black),
+    inset 4px 4px 0 var(--pixel-gray),
+    -4px -4px 0 var(--pixel-black),
+    4px 4px 0 var(--pixel-gray);
+}
+
+.pixel-button {
+  background: var(--pixel-cyan);
+  color: var(--pixel-black);
+  border: 4px solid var(--pixel-white);
+  padding: 12px 24px;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 10px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.1s;
+  box-shadow:
+    inset -4px -4px 0 var(--pixel-black),
+    inset 4px 4px 0 var(--pixel-gray);
+}
+
+.pixel-button:hover {
+  background: var(--pixel-yellow);
+  transform: translate(2px, 2px);
+  box-shadow:
+    inset -2px -2px 0 var(--pixel-black),
+    inset 2px 2px 0 var(--pixel-gray);
+}
+
+.pixel-button:active {
+  transform: translate(4px, 4px);
+  box-shadow:
+    inset 2px 2px 0 var(--pixel-black),
+    inset -2px -2px 0 var(--pixel-gray);
+}
+
+/* 掃描線效果 */
+.scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanlines::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    transparent 50%,
+    rgba(0, 255, 65, 0.03) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 1000;
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(4px);
+  }
+}
+
+/* 閃爍效果 */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0.3;
+  }
+}
+
+.blink {
+  animation: blink 1s infinite;
+}
+
+/* 像素化文字 */
+.pixel-text {
+  text-shadow:
+    2px 2px 0 var(--pixel-black),
+    -2px -2px 0 var(--pixel-black),
+    2px -2px 0 var(--pixel-black),
+    -2px 2px 0 var(--pixel-black);
+}
+
+/* 網格背景 */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* 狀態顏色 */
+.status-active {
+  color: var(--pixel-green);
+}
+
+.status-upcoming {
+  color: var(--pixel-yellow);
+}
+
+.status-ended {
+  color: var(--pixel-gray);
+}
+
+.status-potential {
+  color: var(--pixel-cyan);
+}
+
+/* 卡片樣式 */
+.pixel-card {
+  background: var(--bg-secondary);
+  border: 3px solid var(--pixel-white);
+  padding: 16px;
+  margin: 8px;
+  box-shadow:
+    inset -3px -3px 0 var(--pixel-black),
+    inset 3px 3px 0 var(--pixel-gray),
+    -3px -3px 0 var(--pixel-black),
+    3px 3px 0 var(--pixel-gray);
+  transition: all 0.2s;
+}
+
+.pixel-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow:
+    inset -1px -1px 0 var(--pixel-black),
+    inset 1px 1px 0 var(--pixel-gray),
+    -5px -5px 0 var(--pixel-black),
+    5px 5px 0 var(--pixel-gray);
+}
+
+/* 滾動條樣式 */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+  border: 2px solid var(--pixel-white);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pixel-cyan);
+  border: 2px solid var(--pixel-black);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--pixel-yellow);
+}
+

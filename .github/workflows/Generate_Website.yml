@@ -1,0 +1,73 @@
+name: Generate and Deploy Website
+
+on:
+  workflow_run:
+    workflows: ["Airdrop Intel Pipeline"]
+    types:
+      - completed
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"  # 每小時執行一次（在 pipeline 之後）
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download pipeline artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-reports
+          path: website/public/data
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+        if: github.event.workflow_run
+
+      - name: Copy local data files (fallback)
+        run: |
+          mkdir -p website/public/data
+          if [ -f "output/events_sources.json" ]; then
+            cp output/events_sources.json website/public/data/
+          fi
+          if [ -f "output/wallets_report.json" ]; then
+            cp output/wallets_report.json website/public/data/
+          fi
+          if [ -f "output/alerts.json" ]; then
+            cp output/alerts.json website/public/data/
+          fi
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm install
+
+      - name: Build Next.js app
+        working-directory: website
+        env:
+          NEXT_PUBLIC_SITE_URL: ${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/out
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

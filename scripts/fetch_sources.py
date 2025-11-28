@@ -585,18 +585,22 @@ def run():
 
     # Airdrop Checklist
     if "airdrop_checklist" in sources:
-        logger.info("--- 開始處理 Airdrop Checklist ---")
-        # 在請求之間增加延遲
-        if all_events:
-            time.sleep(REQUEST_DELAY)
-        try:
-            events = fetch_airdrop_checklist(sources["airdrop_checklist"])
-            all_events.extend(events)
-            source_stats["airdrop_checklist"] = len(events)
-            logger.info(f"Airdrop Checklist 完成: {len(events)} 個事件")
-        except Exception as e:
-            logger.error(f"抓取 Airdrop Checklist 失敗: {e}", exc_info=True)
-            source_stats["airdrop_checklist"] = 0
+        if sources["airdrop_checklist"].get("enabled"):
+            logger.info("--- 開始處理 Airdrop Checklist ---")
+            # 在請求之間增加延遲
+            if all_events:
+                time.sleep(REQUEST_DELAY)
+            try:
+                events = fetch_airdrop_checklist(sources["airdrop_checklist"])
+                all_events.extend(events)
+                source_stats["airdrop_checklist"] = len(events)
+                logger.info(f"Airdrop Checklist 完成: {len(events)} 個事件")
+            except Exception as e:
+                logger.error(f"抓取 Airdrop Checklist 失敗: {e}", exc_info=True)
+                source_stats["airdrop_checklist"] = 0
+        else:
+            logger.info("Airdrop Checklist 已停用，跳過")
+            # 不加入統計，避免顯示 0 個事件
     else:
         logger.info("Airdrop Checklist 未在配置中")
 
@@ -605,16 +609,20 @@ def run():
     generic_sources = {
         "altcointrading_airdrops": (".airdrop-item", "a"),
         "airdropsalert": (
-            # airdropsalert 可能需要更廣泛的選擇器
-            # 嘗試多種可能的選擇器（優先順序從左到右）
-            "article, .card, .item, .post, .entry, [class*='airdrop'], [class*='list'], div[class*='airdrop'], section[class*='airdrop']",
-            "a, h2, h3, h4, .title, [class*='title'], strong, b"
+            # airdropsalert 網站可能使用不同的結構，嘗試多種選擇器
+            ".airdrop-card, .card, article, .item, .post, .entry, [class*='airdrop'], [class*='card'], div[class*='airdrop'], section[class*='airdrop'], .list-item, .airdrop-item, tr[class*='airdrop'], li[class*='airdrop']",
+            "a, h2, h3, h4, h5, .title, [class*='title'], strong, b, .name, [class*='name']"
         ),
         "icomarks_airdrops": (".airdrop-item", "a"),
     }
 
     for src_name, selector_tuple in generic_sources.items():
         if src_name in sources:
+            # 檢查是否啟用
+            if not sources[src_name].get("enabled"):
+                logger.info(f"{src_name} 已停用，跳過")
+                continue
+
             logger.info(f"--- 開始處理 {src_name} ---")
             # 在請求之間增加延遲
             if all_events:  # 不是第一個來源
@@ -651,10 +659,11 @@ def run():
         logger.info(f"  {status} {src_name}: {count} 個事件")
     logger.info(f"總計: {len(all_events)} 個事件")
 
-    # 檢查是否有來源沒有資料
-    zero_sources = [name for name, count in source_stats.items() if count == 0]
+    # 檢查是否有來源沒有資料（只檢查啟用的來源）
+    enabled_sources = {name: cfg for name, cfg in sources.items() if cfg.get("enabled", True)}
+    zero_sources = [name for name, count in source_stats.items() if count == 0 and name in enabled_sources]
     if zero_sources:
-        logger.warning(f"以下來源未收集到資料: {', '.join(zero_sources)}")
+        logger.warning(f"以下啟用的來源未收集到資料: {', '.join(zero_sources)}")
         logger.warning("可能原因: CSS selector 不正確、網頁結構改變、或網站有反爬蟲機制")
 
     logger.info("=" * 60)

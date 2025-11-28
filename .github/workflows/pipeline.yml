@@ -40,13 +40,19 @@ jobs:
           python scripts/notify_discord.py
 
       - name: Send mini-report to Discord
-        if: env.DISCORD_WEBHOOK_URL != '' && always()
+        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' && always() }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           # 檢查檔案是否存在
           if [ ! -f "output/events_sources.json" ]; then
             echo "events_sources.json not found, skipping Discord report"
+            exit 0
+          fi
+
+          # 檢查 webhook URL
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL not set, skipping Discord report"
             exit 0
           fi
 
@@ -69,32 +75,46 @@ jobs:
           NUM_CHECKLIST=$(jq '[.[] | select(.source == "airdrop_checklist")] | length' output/events_sources.json 2>/dev/null || echo "0")
           NUM_ALERT=$(jq '[.[] | select(.source == "airdropsalert")] | length' output/events_sources.json 2>/dev/null || echo "0")
 
-          # 統計錢包
-          NUM_WALLETS=$(jq '. | length' output/wallets_report.json 2>/dev/null || echo "0")
-          WALLETS_WITH_ACTIVITY=$(jq '[.[] | select(.has_defi_activity == true)] | length' output/wallets_report.json 2>/dev/null || echo "0")
-          TOTAL_TX=$(jq '[.[] | .tx_count] | add' output/wallets_report.json 2>/dev/null || echo "0")
+          # 統計錢包（檢查檔案是否存在）
+          if [ -f "output/wallets_report.json" ]; then
+            NUM_WALLETS=$(jq '. | length' output/wallets_report.json 2>/dev/null || echo "0")
+            WALLETS_WITH_ACTIVITY=$(jq '[.[] | select(.has_defi_activity == true)] | length' output/wallets_report.json 2>/dev/null || echo "0")
+            TOTAL_TX=$(jq '[.[] | .tx_count // 0] | add' output/wallets_report.json 2>/dev/null || echo "0")
+          else
+            NUM_WALLETS="0"
+            WALLETS_WITH_ACTIVITY="0"
+            TOTAL_TX="0"
+          fi
 
-          # 統計 Alerts
-          NUM_ALERTS=$(jq '. | length' output/alerts.json 2>/dev/null || echo "0")
-          NUM_HIGH_ALERTS=$(jq '[.[] | select(.priority == "high")] | length' output/alerts.json 2>/dev/null || echo "0")
-          NUM_MEDIUM_ALERTS=$(jq '[.[] | select(.priority == "medium")] | length' output/alerts.json 2>/dev/null || echo "0")
-          NUM_LOW_ALERTS=$(jq '[.[] | select(.priority == "low")] | length' output/alerts.json 2>/dev/null || echo "0")
+          # 統計 Alerts（檢查檔案是否存在）
+          if [ -f "output/alerts.json" ]; then
+            NUM_ALERTS=$(jq '. | length' output/alerts.json 2>/dev/null || echo "0")
+            NUM_HIGH_ALERTS=$(jq '[.[] | select(.priority == "high")] | length' output/alerts.json 2>/dev/null || echo "0")
+            NUM_MEDIUM_ALERTS=$(jq '[.[] | select(.priority == "medium")] | length' output/alerts.json 2>/dev/null || echo "0")
+            NUM_LOW_ALERTS=$(jq '[.[] | select(.priority == "low")] | length' output/alerts.json 2>/dev/null || echo "0")
+            TOP_ALERTS=$(jq -r '[.[] | select(.priority == "high") | .project] | .[0:3] | join(", ")' output/alerts.json 2>/dev/null || echo "")
+          else
+            NUM_ALERTS="0"
+            NUM_HIGH_ALERTS="0"
+            NUM_MEDIUM_ALERTS="0"
+            NUM_LOW_ALERTS="0"
+            TOP_ALERTS=""
+          fi
 
-          # 取得前 3 個高優先級 alerts 的專案名稱
-          TOP_ALERTS=$(jq -r '[.[] | select(.priority == "high") | .project] | .[0:3] | join(", ")' output/alerts.json 2>/dev/null || echo "None")
-          if [ "$TOP_ALERTS" = "" ]; then
+          # 處理空字串
+          if [ -z "$TOP_ALERTS" ] || [ "$TOP_ALERTS" = "null" ]; then
             TOP_ALERTS="None"
           fi
 
           # 取得前 5 個 active 空投的專案名稱（去重）
-          TOP_ACTIVE=$(jq -r '[.[] | select(.status == "active") | .project] | unique | .[0:5] | join(", ")' output/events_sources.json 2>/dev/null || echo "None")
-          if [ "$TOP_ACTIVE" = "" ]; then
+          TOP_ACTIVE=$(jq -r '[.[] | select(.status == "active") | .project] | unique | .[0:5] | join(", ")' output/events_sources.json 2>/dev/null || echo "")
+          if [ -z "$TOP_ACTIVE" ] || [ "$TOP_ACTIVE" = "null" ]; then
             TOP_ACTIVE="None"
           fi
 
           # 取得前 3 個 upcoming 空投的專案名稱
-          TOP_UPCOMING=$(jq -r '[.[] | select(.status == "upcoming") | .project] | unique | .[0:3] | join(", ")' output/events_sources.json 2>/dev/null || echo "None")
-          if [ "$TOP_UPCOMING" = "" ]; then
+          TOP_UPCOMING=$(jq -r '[.[] | select(.status == "upcoming") | .project] | unique | .[0:3] | join(", ")' output/events_sources.json 2>/dev/null || echo "")
+          if [ -z "$TOP_UPCOMING" ] || [ "$TOP_UPCOMING" = "null" ]; then
             TOP_UPCOMING="None"
           fi
 
@@ -131,13 +151,13 @@ jobs:
           🔮 **Upcoming Airdrops:**
           $TOP_UPCOMING
 
-          📎 Full details available in GitHub Actions artifacts."
+          📎 Full details available in GitHub Actions artifacts.(https://github.com/dennislee928/Airdrop-intel/actions)"
 
           # 使用 jq 正確轉義 JSON 字串
           ESCAPED_MESSAGE=$(echo "$MESSAGE" | jq -Rs .)
 
           # 發送到 Discord
-          curl -s -H "Content-Type: application/json" \
+          curl -s -f -H "Content-Type: application/json" \
             -X POST \
             -d "{\"content\": $ESCAPED_MESSAGE}" \
             "$DISCORD_WEBHOOK_URL" || echo "Failed to send Discord message"
