@@ -32,3 +32,6 @@ airdrop-intel-pipeline/
 ├─ requirements.txt
 ├─ README.md
 └─ project_structure.md
+```
+
+
